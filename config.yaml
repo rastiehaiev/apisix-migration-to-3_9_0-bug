@@ -1,0 +1,119 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+apisix:
+  enable_control: false
+  control:
+    ip: "127.0.0.1"
+    port: 9090
+  node_listen:    # APISIX listening port
+    - 9080
+  enable_heartbeat: true
+  enable_admin: true
+  enable_admin_cors: true
+  enable_debug: false
+
+  enable_dev_mode: false                       # Sets nginx worker_processes to 1 if set to true
+  enable_reuseport: true                       # Enable nginx SO_REUSEPORT switch if set to true.
+  enable_ipv6: true # Enable nginx IPv6 resolver
+  enable_server_tokens: false # Whether the APISIX version number should be shown in Server header
+
+  proxy_cache:                         # Proxy Caching configuration
+    cache_ttl: 10s                     # The default caching time if the upstream does not specify the cache time
+    zones:                             # The parameters of a cache
+      - name: disk_cache_one             # The name of the cache, administrator can be specify
+        # which cache to use by name in the admin api
+        memory_size: 50m                 # The size of shared memory, it's used to store the cache index
+        disk_size: 1G                    # The size of disk, it's used to store the cache data
+        disk_path: "/tmp/disk_cache_one" # The path to store the cache data
+        cache_levels: "1:2"              # The hierarchy levels of a cache
+
+  router:
+    http: radixtree_host_uri  # radixtree_uri: match route by uri(base on radixtree)
+    ssl: 'radixtree_sni'        # radixtree_sni: match route by SNI(base on radixtree)
+
+  proxy_mode: http
+  dns_resolver_valid: 30
+  resolver_timeout: 5
+  # available since 3.9.0
+  # enable_http2: false
+  ssl:
+    enable: true
+    listen:
+      - port: 9443
+        # available before 3.9.0
+        enable_http2: false
+    ssl_protocols: "TLSv1.2 TLSv1.3"
+    ssl_ciphers: "HIGH:!aNULL:!MD5"
+    ssl_session_tickets: true
+    ssl_verify_client: false
+
+nginx_config:    # config for render the template to genarate nginx.conf
+  error_log: "/dev/stderr"
+  error_log_level: "warn"    # warn,error
+  worker_processes: "auto"
+  enable_cpu_affinity: true
+  worker_rlimit_nofile: 20480  # the number of files a worker process can open, should be larger than worker_connections
+  event:
+    worker_connections: 10620
+  meta:
+    lua_shared_dict:
+      prometheus-metrics: 15m
+  custom_lua_shared_dict: # add custom shared cache to nginx.conf
+    kubernetes_cm-api4: 2m
+
+  http:
+    enable_access_log: true
+    access_log: "/dev/stdout"
+    access_log_format: '$remote_addr - $remote_user [$time_iso8601] "$request_method $host$request_uri $server_protocol" $status $body_bytes_sent $request_time "$http_referer" "$http_user_agent" $http_cf_ray'
+    access_log_format_escape: default
+    keepalive_timeout: 60s         # timeout during which an idle keep-alive client connection will stay open on the server side.
+    client_header_timeout: 60s     # timeout for reading client request header, then 408 (Request Time-out) error is returned to the client
+    client_body_timeout: 60s       # timeout for reading client request body, then 408 (Request Time-out) error is returned to the client
+    send_timeout: 60s              # timeout for transmitting a response to the client.then the connection is closed
+    underscores_in_headers: "on"   # default enables the use of underscores in client request header fields
+    real_ip_header: "X-Real-IP"    # http://nginx.org/en/docs/http/ngx_http_realip_module.html#real_ip_header
+    real_ip_from:                  # http://nginx.org/en/docs/http/ngx_http_realip_module.html#set_real_ip_from
+      - 127.0.0.1
+      - 'unix:'
+
+deployment:
+  role: traditional
+  role_traditional:
+    config_provider: etcd
+  admin:
+    allow_admin:               # https://nginx.org/en/docs/http/ngx_http_access_module.html#allow
+      - 0.0.0.0/0              # We need to restrict ip access rules for security. 0.0.0.0/0 is for test.
+
+    admin_key:
+      - name: "admin"
+        key: VQrwFW9x4Cxjcy
+        role: admin
+
+  etcd:
+    host:                           # it's possible to define multiple etcd hosts addresses of the same etcd cluster.
+      - "http://etcd:2379"          # multiple etcd address
+    prefix: "/apisix"               # apisix configurations prefix
+    timeout: 30                     # 30 seconds
+
+plugin_attr:
+  prometheus:
+    export_addr:
+      ip: '[::]'
+      port: 9091
+    export_uri: /apisix/prometheus/metrics
+    metric_prefix: apisix_

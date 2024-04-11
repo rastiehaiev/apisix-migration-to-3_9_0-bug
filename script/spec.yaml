@@ -1,0 +1,49 @@
+---
+upstreams:
+
+  - id: api
+    name: api
+    desc: API upstream
+    type: roundrobin
+    scheme: https
+    timeout:
+      connect: 5
+      read: 120
+      send: 10
+    nodes:
+      - host: "httpbin.org"
+        port: 443
+        weight: 1
+
+services:
+
+  - id: api-http
+    name: api-http
+    plugins:
+      gzip:
+        min_length: 1100
+        comp_level: 6
+        types:
+          - text/plain
+          - application/json
+          - text/csv
+          - application/x-ndjson
+        vary: true
+
+routes:
+
+  - id: api-http
+    name: api-http
+    uri: /*
+    hosts:
+      - "example.com"
+    service_id: api-http
+    upstream_id: api
+    priority: 100
+
+ssls:
+  - id: ssl
+    cert: "../certs/example.pem"
+    key: "../certs/example.key"
+    snis:
+      - "example.com"
